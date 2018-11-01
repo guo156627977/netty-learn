@@ -1,13 +1,23 @@
-package com.gzq.flash;
+package com.gzq.flash.client;
 
-import com.gzq.flash.handler.FirstClientHandler;
+import com.gzq.flash.client.handler.LoginResponseHandler;
+import com.gzq.flash.client.handler.MessageResponseHandler;
+import com.gzq.flash.codec.PacketDecoder;
+import com.gzq.flash.codec.PacketEncoder;
+import com.gzq.flash.protocol.request.LoginRequestPacket;
+import com.gzq.flash.protocol.request.MessageRequestPacket;
+import com.gzq.flash.server.handler.LifeCyCleTestHandler;
+import com.gzq.flash.util.SessionUtil;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 
 import java.util.Date;
+import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -30,11 +40,24 @@ public class NettyClient {
                 // 2.指定 IO 类型为 NIO
                 .channel(NioSocketChannel.class)
                 // 3.IO 处理逻辑
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
+                .option(ChannelOption.SO_KEEPALIVE, true)
+                .option(ChannelOption.TCP_NODELAY, true)
                 .handler(new ChannelInitializer<Channel>() {
                     @Override
                     protected void initChannel(Channel ch) throws Exception {
                         // ch.pipeline().addLast(new StringEncoder());
-                        ch.pipeline().addLast(new FirstClientHandler());
+                        // ch.pipeline().addLast(new FirstClientHandler());
+                        // ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 7, 4));
+
+                        // ch.pipeline().addLast(new Spliter());
+                        // ch.pipeline().addLast(new ClientHandler());
+
+                        ch.pipeline().addLast(new LifeCyCleTestHandler());
+                        ch.pipeline().addLast(new PacketDecoder());
+                        ch.pipeline().addLast(new LoginResponseHandler());
+                        ch.pipeline().addLast(new MessageResponseHandler());
+                        ch.pipeline().addLast(new PacketEncoder());
                     }
                 });
         connect(bootstrap, host,port,MAX_RETRY);
@@ -66,6 +89,9 @@ public class NettyClient {
         bootstrap.connect(host, port).addListener(future -> {
             if (future.isSuccess()) {
                 System.out.println("连接成功！");
+                Channel channel = ((ChannelFuture) future).channel();
+                // 连接成功之后，启动控制台线程
+                startConsoleThread(channel);
             } else if (retry == 0) {
                 System.err.println("重试次数已用完，放弃连接！");
                 bootstrap.config().group().shutdownGracefully();
@@ -81,6 +107,39 @@ public class NettyClient {
         });
     }
 
+
+    private static void startConsoleThread(Channel channel) {
+        Scanner scanner = new Scanner(System.in);
+        LoginRequestPacket loginRequestPacket = new LoginRequestPacket();
+
+        new Thread(() -> {
+            while (!Thread.interrupted()) {
+                if (SessionUtil.hasLogin(channel)) {
+                    System.out.println("输入用户名登录:");
+                    String userName = scanner.nextLine();
+                    loginRequestPacket.setUserName(userName);
+
+                    // 密码使用默认的
+                    loginRequestPacket.setPassword("pwd");
+
+                    // 发送登录数据包
+                    channel.writeAndFlush(loginRequestPacket);
+                    waitForLoginResponse();
+                }else {
+                    String toUserId = scanner.next();
+                    String message = scanner.next();
+                    channel.writeAndFlush(new MessageRequestPacket(toUserId, message));
+                }
+            }
+        }).start();
+    }
+
+    private static void waitForLoginResponse() {
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException ignored) {
+        }
+    }
     /**
      * 无限重连
      *

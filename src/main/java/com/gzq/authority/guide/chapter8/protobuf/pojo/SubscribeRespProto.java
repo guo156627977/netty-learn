@@ -377,7 +377,7 @@ public final class SubscribeRespProto {
                 SubscribeResp.class, Builder.class);
       }
 
-      // Construct using com.gzq.netty.authority.guide.chapter8.pojo.SubscribeRespProto.SubscribeResp.newBuilder()
+      // Construct using com.gzq.netty.authority.guide.chapter8.protocol.SubscribeRespProto.SubscribeResp.newBuilder()
       private Builder() {
         maybeForceBuilderInitialization();
       }

@@ -1,4 +1,4 @@
-package com.gzq.flash.handler;
+package com.gzq.flash.server.handler;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
